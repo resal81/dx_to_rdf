@@ -5,6 +5,7 @@ from __future__ import division
 import sys
 import time
 import os
+import argparse
 from collections import namedtuple
 
 import numpy as np
@@ -164,14 +165,16 @@ class DX:
 
         self.center = Point(cx, cy, cz)
 
-    def parse(self, savename='data.npy'):
+    def parse(self, should_cache=False):
         """ parse reads the grid data from the dx file.
             Note to call .peek method first.
         """
+        cache_name, ext = os.path.splitext(self.fname)
+        cache_name += '.npy'
 
-        if savename and os.path.exists(savename):
-            print('Loading data from %s ...' % savename)
-            self.data = np.load(savename)
+        if should_cache and os.path.exists(cache_name):
+            print('Loading cached data from %s ...' % cache_name)
+            self.data = np.load(cache_name)
         else:
             N = self.counts.x * self.counts.y * self.counts.z
 
@@ -197,6 +200,7 @@ class DX:
                             m = (counter / N) / 0.02
                             msg = 'Reading %-50s %4d%%' % ('=' * int(m), round(m * 2, 0))
                             print(msg, end='\r')
+                            sys.stdout.flush()
             print('')
             t2 = time.time()
             print('Finished reading file in %.1f seconds' % (t2-t1))
@@ -212,8 +216,9 @@ class DX:
                         self.data[ix, iy, iz] = tmp_data[counter]
                         counter += 1
 
-            if savename:
-                np.save(savename, self.data)
+            if should_cache:
+                print('Saving cached data => %s' % cache_name)
+                np.save(cache_name, self.data)
 
         print('Shape => self.data.shape => ', self.data.shape)
         print('Grid is ready.')
@@ -265,7 +270,7 @@ class DX:
 
         plotter([zdata1, zdata2], pltype='imshow')
 
-    def analyze(self):
+    def analyze(self, should_plot=False):
         print('Analyzing ...')
 
         rocc = namedtuple('result', 'r occ')
@@ -314,8 +319,9 @@ class DX:
             excess_series.append(excess)
             excess_r.append(r)
 
-        print(excess)
-        plotter([[radii, values],[excess_r, excess_series]], pltype='plotxy')
+        print('Excess ions => %.1f' % excess)
+        if should_plot:
+            plotter([[radii, values], [excess_r, excess_series]], pltype='plotxy')
 
     def __repr__(self):
         info = '\nOpenDX file with the following properties:\n'
@@ -328,25 +334,41 @@ class DX:
 
 
 def main():
-    if len(sys.argv) <= 2:
-        usage = '\nUsage:\n'
-        usage += '   python3 %s [cmd] dxfile\n' % __file__
-        usage += '\nCommands: peek, \n'
-        print(usage)
-        return
+    p = argparse.ArgumentParser()
 
-    dx = DX(sys.argv[2])
+    p.add_argument('--cmd', default='info', required=True,
+                   help='command to be used: info, analyze, test')
+
+    p.add_argument('--dx', required=True,
+                   help='name of the dx file')
+
+    p.add_argument('--minz', default=-30, type=float,
+                   help='min z')
+
+    p.add_argument('--maxz', default=+30, type=float,
+                   help='max z')
+
+    p.add_argument('--cache', action='store_true', default=False,
+                   help='cache processed data')
+
+    p.add_argument('--plot', action='store_true', default=False,
+                   help='show plots')
+
+    args = p.parse_args()
+
+    dx = DX(args.dx)
     dx.peek()
     print(dx)
 
-    if sys.argv[1] == 'info':
+    if args.cmd == 'info':
         pass
 
-    if sys.argv[1] == 'analyze':
-        dx.parse()
-        # dx.imshow()
-        dx.aggregate('z', -30, 30)
-        dx.analyze()
+    elif args.cmd == 'analyze':
+        dx.parse(should_cache=args.cache)
+        if args.plot:
+            dx.imshow()
+        dx.aggregate('z', args.minz, args.maxz)
+        dx.analyze(should_plot=args.plot)
 
     if sys.argv[1] == 'test':
         print(dx.coord_to_index(0, 0, 0))
