@@ -270,12 +270,20 @@ class DX:
 
         plotter([zdata1, zdata2], pltype='imshow')
 
-    def analyze(self, should_plot=False):
+    def analyze(self, maxr=60, limr=40, should_plot=False):
+        """
+            maxr => the maximum distance from center that should be considered
+            limr => the cutoff that defined the distance b/w inside and bulk
+            should_plot => will show any intermediate plots
+        """
+
+        if limr >= maxr:
+            raise ValueError('limr cannot be bigger than maxr')
+
         print('Analyzing ...')
 
         rocc = namedtuple('result', 'r occ')
         results = []
-        maxr = 60
         distance = lambda x1, y1, x2, y2: ((x1-x2)**2 + (y1-y2)**2)**0.5
 
         for ix in range(self.counts.x):
@@ -290,6 +298,8 @@ class DX:
 
         radii = [0 + n * dr for n in range(int(maxr/dr))]
         numbs = [1 for i in range(len(radii) - 1)]
+
+        # values will eventually store g(r)
         values = [0 for i in range(len(radii) - 1)]
 
         for i, (rmin, rmax) in enumerate(zip(radii[:-1], radii[1:])):
@@ -299,10 +309,12 @@ class DX:
                     values[i] += rocc.occ
 
         radii = radii[:-1]
-        # plotter([[radii, values], [radii, numbs]], pltype='plotxy')
 
         values = np.array(values) / np.array(numbs)
-        values_tail = values[-(len(radii)//4):].mean()
+
+        M = len([x for x in radii if x > limr and x < maxr])
+        print('For normalizing, picking the average of last "%d" elements ...' % M)
+        values_tail = values[-M:].mean()
         values = values / values_tail
 
         # plotter([[radii, values]], pltype='plotxy')
@@ -310,11 +322,12 @@ class DX:
         excess = 0
         excess_series = []
         excess_r = []
+        adjust_factor = dr / (self.spacing.x * self.spacing.x)
 
         for i, r in enumerate(radii):
-            if r > 40:
+            if r > limr:
                 break
-            ex = (values[i] - 1) * 2 * r * np.pi * 140 * values_tail * (dr/0.25)
+            ex = (values[i] - 1) * 2 * r * np.pi * 140 * values_tail * adjust_factor 
             excess += ex
             excess_series.append(excess)
             excess_r.append(r)
@@ -348,6 +361,12 @@ def main():
     p.add_argument('--maxz', default=+30, type=float,
                    help='max z')
 
+    p.add_argument('--maxr', default=+60, type=float,
+                   help='max r')
+
+    p.add_argument('--limr', default=+40, type=float,
+                   help='inside-bulk cutoff')
+
     p.add_argument('--cache', action='store_true', default=False,
                    help='cache processed data')
 
@@ -368,7 +387,7 @@ def main():
         if args.plot:
             dx.imshow()
         dx.aggregate('z', args.minz, args.maxz)
-        dx.analyze(should_plot=args.plot)
+        dx.analyze(maxr=args.maxr, limr=args.limr, should_plot=args.plot)
 
     if sys.argv[1] == 'test':
         print(dx.coord_to_index(0, 0, 0))
