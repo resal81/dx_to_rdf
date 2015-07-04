@@ -24,7 +24,8 @@ def plotter(data=[], pltype=None):
         # expected data => [ np.array.2d, ...]
         for i, d in enumerate(data):
             ax = axes[0][i]
-            im = ax.imshow(data[i], origin='lower')
+            da = data[i]
+            im = ax.imshow(da, origin='lower')
             div = make_axes_locatable(ax)
             cax = div.append_axes("right", size="10%", pad=0.05)
             cbar = plt.colorbar(im, cax=cax)
@@ -174,7 +175,7 @@ class DX:
         else:
             N = self.counts.x * self.counts.y * self.counts.z
 
-            tmp_data = np.zeros(N, dtype='|S4')
+            tmp_data = np.zeros(N, dtype='|S12')
             self.data = np.zeros((self.counts.x, self.counts.y, self.counts.z))
 
             counter = 0
@@ -218,7 +219,7 @@ class DX:
         print('Grid is ready.')
         print('')
 
-    def average_axis(self, axis, minv, maxv):
+    def aggregate(self, axis, minv, maxv, action='mean'):
         assert axis in ('x', 'y', 'z')
 
         print('Averaging for %s axis from %.1f to %.1f' % (axis, minv, maxv))
@@ -243,7 +244,12 @@ class DX:
             ax = 2
 
         print('Indices => %d %d' % (lo, hi))
-        self.working_data = selected.mean(axis=ax)
+        if action == 'mean':
+            self.working_data = selected.mean(axis=ax)
+        elif action == 'sum':
+            self.working_data = selected.sum(axis=ax)
+        else:
+            raise ValueError('Unknown action => %s' % action)
 
         print('Shape => self.working_data => ', self.working_data.shape)
         print('')
@@ -251,10 +257,10 @@ class DX:
     def imshow(self):
         """ plots the working data using imshow """
 
-        self.average_axis('z', -70, 70)
+        self.aggregate('z', -70, 70)
         zdata1 = self.working_data
 
-        self.average_axis('z', -30, 30)
+        self.aggregate('z', -30, 30)
         zdata2 = self.working_data
 
         plotter([zdata1, zdata2], pltype='imshow')
@@ -264,23 +270,22 @@ class DX:
 
         rocc = namedtuple('result', 'r occ')
         results = []
+        maxr = 60
         distance = lambda x1, y1, x2, y2: ((x1-x2)**2 + (y1-y2)**2)**0.5
 
-        maxr = -1
         for ix in range(self.counts.x):
             for iy in range(self.counts.y):
                 p = self.index_to_coord(ix, iy, 0)
                 r = distance(p.x, p.y, 0.0, 0.0)
                 if r > maxr:
-                    maxr = r
+                    continue
                 results.append(rocc(r, self.working_data[ix, iy]))
 
         dr = self.spacing.x
-        maxr = 60
 
         radii = [0 + n * dr for n in range(int(maxr/dr))]
-        numbs = [0 for i in range(len(radii))]
-        values = [0 for i in range(len(radii))]
+        numbs = [0 for i in range(len(radii) - 1)]
+        values = [0 for i in range(len(radii) - 1)]
 
         for i, (rmin, rmax) in enumerate(zip(radii[:-1], radii[1:])):
             for rocc in results:
@@ -288,9 +293,14 @@ class DX:
                     numbs[i] += 1
                     values[i] += rocc.occ
 
+        radii = radii[:-1]
+        # plotter([[radii, values], [radii, numbs]], pltype='plotxy')
+
         values = np.array(values) / np.array(numbs)
+        values = values / values[-40:].mean()
 
         plotter([[radii, values]], pltype='plotxy')
+
 
     def __repr__(self):
         info = '\nOpenDX file with the following properties:\n'
@@ -320,6 +330,8 @@ def main():
     if sys.argv[1] == 'analyze':
         dx.parse()
         dx.imshow()
+        dx.aggregate('z', -20, 20)
+        dx.analyze()
 
     if sys.argv[1] == 'test':
         print(dx.coord_to_index(0, 0, 0))
