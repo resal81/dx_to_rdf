@@ -41,7 +41,7 @@ def plotter(data=[], pltype=None):
         # expected data =>  [ [[x...],[y...]], ]
         for i, d in enumerate(data):
             ax = axes[0][i]
-            ax.plot(data[i][0], data[i][1])
+            ax.plot(data[i][0], data[i][1], lw=2)
 
     else:
         raise ValueError("Unknown pltype => %s" % pltype)
@@ -284,7 +284,7 @@ class DX:
         dr = self.spacing.x
 
         radii = [0 + n * dr for n in range(int(maxr/dr))]
-        numbs = [0 for i in range(len(radii) - 1)]
+        numbs = [1 for i in range(len(radii) - 1)]
         values = [0 for i in range(len(radii) - 1)]
 
         for i, (rmin, rmax) in enumerate(zip(radii[:-1], radii[1:])):
@@ -297,10 +297,25 @@ class DX:
         # plotter([[radii, values], [radii, numbs]], pltype='plotxy')
 
         values = np.array(values) / np.array(numbs)
-        values = values / values[-40:].mean()
+        values_tail = values[-(len(radii)//4):].mean()
+        values = values / values_tail
 
-        plotter([[radii, values]], pltype='plotxy')
+        # plotter([[radii, values]], pltype='plotxy')
 
+        excess = 0
+        excess_series = []
+        excess_r = []
+
+        for i, r in enumerate(radii):
+            if r > 40:
+                break
+            ex = (values[i] - 1) * 2 * r * np.pi * 140 * values_tail * (dr/0.25)
+            excess += ex
+            excess_series.append(excess)
+            excess_r.append(r)
+
+        print(excess)
+        plotter([[radii, values],[excess_r, excess_series]], pltype='plotxy')
 
     def __repr__(self):
         info = '\nOpenDX file with the following properties:\n'
@@ -329,8 +344,8 @@ def main():
 
     if sys.argv[1] == 'analyze':
         dx.parse()
-        dx.imshow()
-        dx.aggregate('z', -20, 20)
+        # dx.imshow()
+        dx.aggregate('z', -30, 30)
         dx.analyze()
 
     if sys.argv[1] == 'test':
