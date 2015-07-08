@@ -317,6 +317,8 @@ class DX:
         values_tail = values[-M:].mean()
         values = values / values_tail
 
+        print('RDF tail is %e => bulk concentration is %f M' % (values_tail, values_tail / (1e-27 * 6.022e23)))
+
         # plotter([[radii, values]], pltype='plotxy')
 
         excess = 0
@@ -335,6 +337,13 @@ class DX:
         print('Excess ions => %.1f' % excess)
         if should_plot:
             plotter([[radii, values], [excess_r, excess_series]], pltype='plotxy')
+
+        # saving
+        #for k in (radii, values, excess_r, excess_series):
+        #    n = len(k)
+        #    k = np.array(k).reshape(n, 1)
+        np.savetxt('rdf_' + self.fname ,  np.array([radii, values]).T)
+        np.savetxt('excess_' + self.fname,  np.array([excess_r, excess_series]).T)
 
     def __repr__(self):
         info = '\nOpenDX file with the following properties:\n'
